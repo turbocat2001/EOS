@@ -39,6 +39,7 @@ void fault_handler(struct regs *r) {
 }
 
 void irq_handler(struct regs *r) {
+    // qemu_printf("INT %u\n", r->idt_index);
     //if (r->idt_index != 32) tty_printf("idt_index = %d\n", r->idt_index);
     // Blank function pointer
     void (*handler)(struct regs *r);
@@ -60,6 +61,7 @@ void irq_handler(struct regs *r) {
 }
 
 void run_interrupt_handler(struct regs* r) {
+    // tty_printf("int %x\n", r->idt_index);
     size_t idt_index = r->idt_index;
     if (idt_index < 32) {
         fault_handler(r);

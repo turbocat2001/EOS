@@ -34,10 +34,6 @@
 // Constants for Kernel heap manager
 #define KHEAP_START_VADDR 0xC0500000 // Change if kernel size > 4MB
 
-// Constants for User heap manager
-#define UHEAP_START_VADDR 0x20000000 // Virtual address where user heap in each process page dir begins
-
-// Functions to
 #define ALIGN_BLOCK(addr) (addr) - ((addr) % PHYS_BLOCK_SIZE);
 
 // Addresses of the Kernel in the Physical and Virtual memory
@@ -49,8 +45,5 @@ extern uint32_t kernel_virt_end;
 // Addresses of the Physical Memory Map in the Physical memory
 extern uint32_t kernel_phys_map_start;
 extern uint32_t kernel_phys_map_end;
-
-typedef uint32_t virtual_addr;
-typedef uint32_t physical_addr;
 
 #endif  // _MEMLAYOUT_H_

@@ -16,18 +16,31 @@
 #include <kernel/fs/vfs.h>
 #include <kernel/fs/initrd.h>
 
-#include <kernel/pm/elf.h>
 #include <kernel/pm/pe.h>
-#include <kernel/pm/thread.h>
+#include <kernel/pm/kex.h>
 
 #include <kernel/kernel.h>
 
 #include <kernel/io/qemu_log.h>
 #include <kernel/libk/string.h>
+#include <kernel/libk/assert.h>
 
 #include <kernel/gui/consolewindow.h>
 
 #include <stdint.h>
+
+#define STBI_NO_STDIO 1
+#define STBI_NO_GIF   1
+#define STB_IMAGE_IMPLEMENTATION 1
+#define STBI_NO_LINEAR 1
+#define STBI_NO_HDR 1
+// #define STBI_NO_FAILURE_STRINGS 1
+#define STBI_NO_THREAD_LOCALS 1 // !
+#define STBI_ASSERT assert
+#define STBI_MALLOC(sz) kmalloc(sz)
+#define STBI_REALLOC(p,newsz) krealloc(p,newsz)
+#define STBI_FREE(p) kfree(p)
+#include <kernel/utils/stb_image.h>
 
 char ksh_working_directory[256];
 
@@ -91,15 +104,15 @@ void ksh_main() {
             }
         } else if (strcmp(cmd, "ls") == 0) {
             ksh_cmd_ls();
-        } else if (strlen(cmd) > 9 && strncmp(cmd, "elf_info ", 9) == 0) {
+        } else if (strlen(cmd) > 9 && strncmp(cmd, "kex_info ", 9) == 0) {
             char fname[100];
             char *tok = strtok(cmd, " ");
             tok = strtok(0, " "); // tok - now is filename
 
             if (fname != 0) {
-                ksh_cmd_elf_info(tok);
+                ksh_cmd_kex_info(tok);
             } else {
-                tty_printf("elf_info: incorrect argument\n");
+                tty_printf("kex_info: incorrect argument\n");
             }
         } else if (strlen(cmd) > 4 && strncmp(cmd, "run ", 4) == 0) {
             char fname[100];
@@ -134,8 +147,16 @@ void ksh_main() {
             int val = 13372;
             asm volatile("mov %0, %%eax" :: "r"(val));
             asm volatile("int $32;");
-        } else if (strcmp(cmd, "kg") == 0) {
-            create_kernel_thread(kthread_grafdemo);
+        } else if (strlen(cmd) > 4 && strncmp(cmd, "img ", 4) == 0) {
+            char fname[100];
+            char *tok = strtok(cmd, " ");
+            tok = strtok(0, " "); // tok - now is filename
+
+            if (fname != 0) {
+                ksh_cmd_img(tok);
+            } else {
+                tty_printf("img: incorrect argument\n");
+            }
         } else {
             ksh_cmd_unknown();
         }
@@ -143,45 +164,6 @@ void ksh_main() {
 }
 
 // Command handlers implementation
-
-void kthread_grafdemo() { // TODO why invalid opcode on 0x4C happens ????
-    int i;
-    while (1) {
-        //qemu_printf("iteration\n");
-        /*asm volatile ("cli");
-        for (i = 0; i < 1000; i++) draw_square(700, 250, 300 - i % 300, 300 - i % 300, 0x00AAAA);
-        for (i = 0; i < 1000; i++) draw_square(700, 250, 300 - i % 300, 300 - i % 300, 0xAA0000);
-        asm volatile ("sti");*/
-
-        // TODO understand : why if we dont wrap these code in cli ... sti i see a garbage on the screen? maybe context is corrupting?
-        asm volatile ("cli");
-        for (i = 0; i < 50; i++) {
-            unsigned int arguments[5];
-            arguments[0] = 700;
-            arguments[1] = 250;
-            arguments[2] = 300 - i % 300;
-            arguments[3] = 300 - i % 300;
-            arguments[4] = 0x00AAAA;
-            unsigned int res = 0;
-            asm volatile("mov %%eax, %0;" : "=a"(res) : "a"(2), "b"(arguments));
-            asm volatile("int $0x80;");
-        }
-
-        for (i = 0; i < 50; i++) {
-            unsigned int arguments[5];
-            arguments[0] = 700;
-            arguments[1] = 250;
-            arguments[2] = 300 - i % 300;
-            arguments[3] = 300 - i % 300;
-            arguments[4] = 0xAA0000;
-            unsigned int res = 0;
-            asm volatile("mov %%eax, %0;" : "=a"(res) : "a"(2), "b"(arguments));
-            asm volatile("int $0x80;");
-        }
-
-        asm volatile("sti");
-    }
-}
 
 void ksh_cmd_cpuid() {
     detect_cpu();
@@ -193,7 +175,7 @@ void ksh_cmd_unknown() {
 }
 
 void ksh_cmd_about() {
-    tty_printf("%s   Rustem Gimadutdinov\n", EOS_VERSION_STRING);
+    tty_printf("EOS v0.1\n");
 }
 
 void ksh_cmd_ticks() {
@@ -241,7 +223,7 @@ void ksh_cmd_cat(char *fname) {
         strcpy(fname, temp);
     }
 
-    char *buf = (char*) kheap_malloc(1000);
+    char *buf = (char*) kmalloc(1000);
 
     if (!vfs_exists(fname)) {
         tty_printf("cat: error file not found\n");
@@ -251,7 +233,7 @@ void ksh_cmd_cat(char *fname) {
         (void)res;
         buf[fsize] = '\0';
         tty_printf("cat: file %s:\n\n%s\n", fname, buf);
-        kheap_free(buf);
+        kfree(buf);
     }
 }
 
@@ -279,7 +261,7 @@ void ksh_cmd_ls() {
     tty_printf("\n");
 }
 
-void ksh_cmd_elf_info(char *fname) {
+void ksh_cmd_kex_info(char *fname) {
     if (fname[0] != '/') { // TODO: make function
         char temp[256];
         strcpy(temp, ksh_working_directory);
@@ -287,8 +269,38 @@ void ksh_cmd_elf_info(char *fname) {
         strcpy(fname, temp);
     }
 
-    tty_printf("elf fname = %s\n", fname);
-    elf_info_short(fname);
+    // tty_printf("kex fname = %s\n", fname);
+    kex_info(fname);
+}
+
+void ksh_cmd_img(char *fname) {
+    if (fname[0] != '/') { //TODO: make function
+        char temp[256];
+        strcpy(temp, ksh_working_directory);
+        strcat(temp, fname);
+        strcpy(fname, temp);
+    }
+
+    if (!vfs_exists(fname)) {
+        tty_printf("img: error file not found\n");
+    } else {
+        uint32_t fsize = vfs_get_size(fname);
+        uint8_t *buf = (uint8_t *)kmalloc(fsize);
+        int res = vfs_read(fname, 0, fsize, buf);
+        (void)res;
+        int x, y, ch;
+        tty_printf("decoding image..\n");
+        uint8_t *res_img = stbi_load_from_memory(buf, fsize, &x, &y, &ch, 3);
+        tty_printf("image decoded:\n  width = %d\n  height = %d\n  channels = %d\n", x, y, ch);
+        for (int i = 0; i < y; i++) {
+            for (int j = 0; j < x; j++) {
+                uint32_t col = ((uint32_t)(res_img[(i*x + j)*ch]) << 16) + ((uint32_t)(res_img[(i*x + j)*ch + 1]) << 8) + ((uint32_t)(res_img[(i*x + j)*ch + 2]));
+                set_pixel(400 + j, 150 + i, col);
+            }
+        }
+        stbi_image_free(res_img);
+        kfree(buf);
+    }
 }
 
 void ksh_cmd_run(char *fname) {
@@ -309,10 +321,11 @@ void ksh_cmd_run(char *fname) {
     uint32_t signature = 0;
     vfs_read(fname, 0, sizeof(signature), &signature);
 
-    if (signature == ELF_SIGNATURE) { 
-        status = run_elf_file(fname);
-    } else if ((uint16_t)signature == PE_IMAGE_DOS_SIGNATURE) {
+    if ((uint16_t)signature == PE_IMAGE_DOS_SIGNATURE) {
         status = run_pe_file(fname);
+    } else if (signature == 0x554E454D) { // TODO check for MENUET01 not only for MENU
+        kex_run(fname);
+        status = 0; // stub, TODO
     } else {
         tty_printf("Unknown executable file format\n");
         return;
@@ -321,17 +334,13 @@ void ksh_cmd_run(char *fname) {
 }
 
 void ksh_syscall_test() {
-    uint32_t sc_code = 0; uint32_t res = 0;
     char *str = "Hello i'm system call !\n";
-
-    asm volatile("mov %%eax, %0;" : "=a"(res) : "a"(sc_code), "b"(&str));
-    asm volatile("int $0x80;");
-}
-
-void ksh_cmd_regdump() {
-    //uint32_t eax, ebx, ecx, edx, esi, edi, esp, ebp, cr0, cr2, cr3;
+    unsigned i = 0;
+    while (*(str + i)) {
+        asm("int $0x40" ::"a"(63), "b"(1), "c"(*(str + i++)));
+    }
 }
 
 void ksh_cmd_help() {
-    tty_printf("Available commands:\n cpuid - information about processor\n kg - run grafdemo in kernelmode thread\n ticks - get number of ticks\n kheap_test - test kernel heap\n draw_demo - demo super effects\n syscall_test - test system calls work\n ls - list of files and dirs\n cd - set current directory\n pwd - print working directory\n cat - print contents of specified file\n gui_test - draw test window\n elf_info - information about elf file\n run - run program (for example - run first_program_gas.elf)\n cwnd_test - console window system test\n qemu_log_test\n about - about EOS\n help\n");
+    tty_printf("Available commands:\n cpuid - information about processor\n ticks - get number of ticks\n kheap_test - test kernel heap\n draw_demo - demo super effects\n syscall_test - test system calls work\n ls - list of files and dirs\n cd - set current directory\n pwd - print working directory\n cat - print contents of specified file\n gui_test - draw test window\n kex_info - information about kex file\n img - open graphic image file\n run - run program (for example - run first_program_gas.elf)\n cwnd_test - console window system test\n qemu_log_test\n about - about EOS\n help\n");
 }

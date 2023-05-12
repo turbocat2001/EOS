@@ -32,10 +32,6 @@
 // Syscalls
 #include <kernel/syscall.h>
 
-// Process manager
-#include <kernel/pm/elf.h>
-#include <kernel/pm/scheduler.h>
-
 // Graphics
 #include <kernel/graphics/vesafb.h>
 
@@ -72,6 +68,7 @@ int kernel_init(struct multiboot_info *mboot_info) {
 
     //parse_memory_map((memory_map_entry*) mboot_info->mmap_addr, mboot_info->mmap_length);
     pmm_init(mboot_info);
+    // tty_printf("pmm initialized\n");
     //pmm_test();
 
     uint32_t initrd_beg = *(uint32_t*) (mboot_info->mods_addr);
@@ -91,7 +88,7 @@ int kernel_init(struct multiboot_info *mboot_info) {
     //tty_init();
     init_vbe(mboot_info);
 
-    /*back_framebuffer_addr = kheap_malloc(framebuffer_size);
+    /*back_framebuffer_addr = kmalloc(framebuffer_size);
     tty_printf("back_framebuffer_addr = %x\n", back_framebuffer_addr);
     tty_printf("init_vbe: [c0800000]->%x\n", page_table_entry_is_writable(GET_PTE(0xC0800000)));
     memset(back_framebuffer_addr, 0, framebuffer_size); //causes page fault at c0800000*/
@@ -110,14 +107,13 @@ int kernel_init(struct multiboot_info *mboot_info) {
     //disable interrupts while kernel init
     interrupt_disable_all();
 
-    timer_install();
+    // timer_install();
     keyboard_install();
     mouse_install();
 
     syscall_init();
 
-    //enable interrutps
-    //tty_printf("Enabling all interrupts...\n\n");
+    // enable interrutps
     interrupt_enable_all();
 
     return 1;
@@ -140,7 +136,7 @@ void kernel_main(int magic_number, struct multiboot_info *mboot_info) { // Argum
     (void)magic_number;
 
     // Initilize the kernel
-    multiboot_info mboot_info_copy = *mboot_info;
+    multiboot_info_t mboot_info_copy = *mboot_info;
     kernel_init(&mboot_info_copy);
 
     // TODO: 172-174 is it normal to place these lines of code here????????????????????????????????????????????????????????
@@ -148,8 +144,6 @@ void kernel_main(int magic_number, struct multiboot_info *mboot_info) { // Argum
     uint32_t esp;
     asm volatile("mov %%esp, %0" : "=r"(esp));
     tss_set_stack(0x10, esp);
-
-    scheduler_init();
 
     // init the kernel debug shell (ksh)
     ksh_init();

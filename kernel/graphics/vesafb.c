@@ -10,7 +10,16 @@
 
 #include <kernel/libk/string.h>
 
-void init_vbe(multiboot_info *mboot) {
+uint8_t *framebuffer_addr;
+uint32_t framebuffer_pitch;
+uint32_t framebuffer_bpp;
+uint32_t framebuffer_width;
+uint32_t framebuffer_height;
+uint32_t framebuffer_size;
+
+uint8_t *back_framebuffer_addr;
+
+void init_vbe(multiboot_info_t *mboot) {
     //if (mboot->framebuffer_type != 1) {
         //panic
         //tty_printf("Invalid framebuffer type\n");
@@ -36,10 +45,9 @@ void init_vbe(multiboot_info *mboot) {
     //framebuffer_size = framebuffer_width * framebuffer_height * (framebuffer_bpp / 8);
     framebuffer_size = framebuffer_height * framebuffer_pitch;
 
-    physical_addr frame;
-    virtual_addr virt;
-    for (frame = (physical_addr)framebuffer_addr, virt = (virtual_addr)framebuffer_addr;
-         frame < ((physical_addr)framebuffer_addr + framebuffer_size/*0x00400000*//*0x002C0000 0x000F0000*/);
+    uint8_t *frame, *virt;
+    for (frame = framebuffer_addr, virt = framebuffer_addr;
+         frame < (framebuffer_addr + framebuffer_size/*0x00400000*//*0x002C0000 0x000F0000*/);
          frame += PAGE_SIZE, virt += PAGE_SIZE) {
         vmm_map_page(frame, virt);
     }
@@ -63,7 +71,7 @@ void init_vbe(multiboot_info *mboot) {
 
 void create_back_framebuffer() {
     //flush_tlb_entry(back_framebuffer_addr);
-    back_framebuffer_addr = kheap_malloc(framebuffer_size);
+    back_framebuffer_addr = kmalloc(framebuffer_size);
     tty_printf("back_framebuffer_addr = %x\n", back_framebuffer_addr);
     //tty_printf("init_vbe: [c0800000]->%x\n", page_table_entry_is_writable(GET_PTE(0xC0800000)));
     memset(back_framebuffer_addr, 0, framebuffer_size); //causes page fault at c0800000 when this line is placed in the end of init_vbe

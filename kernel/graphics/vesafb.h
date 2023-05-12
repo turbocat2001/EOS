@@ -16,14 +16,14 @@
 #define VESA_WIDTH  framebuffer_width
 #define VESA_HEIGHT framebuffer_height
 
-uint8_t *framebuffer_addr;
-uint32_t framebuffer_pitch;
-uint32_t framebuffer_bpp;
-uint32_t framebuffer_width;
-uint32_t framebuffer_height;
-uint32_t framebuffer_size;
+extern uint8_t *framebuffer_addr;
+extern uint32_t framebuffer_pitch;
+extern uint32_t framebuffer_bpp;
+extern uint32_t framebuffer_width;
+extern uint32_t framebuffer_height;
+extern uint32_t framebuffer_size;
 
-uint8_t *back_framebuffer_addr;
+extern uint8_t *back_framebuffer_addr;
 
 typedef struct rgba_struct {
     uint32_t r;
@@ -32,7 +32,7 @@ typedef struct rgba_struct {
     uint32_t a;
 } rgba_color;
 
-void init_vbe(multiboot_info *mboot);
+void init_vbe(multiboot_info_t *mboot);
 
 void set_pixel(int x, int y, uint32_t color);
 void set_pixel_alpha(int x, int y, rgba_color color);
